@@ -5,15 +5,23 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "despliega": "powershell -ExecutionPolicy Bypass -File deploy.ps1"
   },
   "dependencies": {
+    "d3-geo": "^3.1.1",
+    "lucide-react": "^1.14.0",
     "next": "16.2.6",
+    "prop-types": "^15.8.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-simple-maps": "^3.0.0",
+    "recharts": "^3.8.1",
+    "topojson-client": "^3.1.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/d3-geo": "^3.1.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
