@@ -5,10 +5,22 @@ import { Database } from "lucide-react";
 import {
   NODE_CONFIG, INITIAL_NODE_STATES,
   NodeId, DbRecord, SyncEvent, Arc, NodeState, OpType,
+  GeoArc, UserQuery,
 } from "@/lib/types";
 import NodeCard from "./NodeCard";
 import SyncLog from "./SyncLog";
 import ControlPanel from "./ControlPanel";
+
+function haversineKm(a: [number, number], b: [number, number]): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const sin2 =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(sin2), Math.sqrt(1 - sin2));
+}
 
 const WorldMap = dynamic(() => import("./WorldMap"), { ssr: false });
 
@@ -16,6 +28,9 @@ export default function Dashboard() {
   const [nodeStates, setNodeStates] = useState<Record<string, NodeState>>(INITIAL_NODE_STATES);
   const [events,     setEvents]     = useState<SyncEvent[]>([]);
   const [arcs,       setArcs]       = useState<Arc[]>([]);
+  const [geoArcs,    setGeoArcs]    = useState<GeoArc[]>([]);
+  const [queries,    setQueries]    = useState<UserQuery[]>([]);
+  const [queryMode,  setQueryMode]  = useState(false);
   const counter = useRef(0);
 
   // ── Arco animado en el mapa ────────────────────────────────────────────
@@ -173,6 +188,57 @@ export default function Dashboard() {
     });
   }, [nodeStates, addArc]);
 
+  // ── Consulta de usuario al nodo más cercano ───────────────────────────
+  const handleMapClick = useCallback((coords: [number, number]) => {
+    const online = NODE_CONFIG.filter(n => nodeStates[n.id].online);
+    if (online.length === 0) return;
+
+    let nearest = online[0];
+    let minDist = haversineKm(coords, online[0].coords);
+    for (const node of online.slice(1)) {
+      const d = haversineKm(coords, node.coords);
+      if (d < minDist) { minDist = d; nearest = node; }
+    }
+
+    const distKm    = Math.round(minDist);
+    const latencyMs = Math.max(80, Math.round(minDist / 40));
+    const qid       = `q${counter.current++}`;
+
+    const query: UserQuery = {
+      id: qid, coords,
+      targetNode: nearest.id,
+      distanceKm: distKm,
+      latencyMs,
+      status: "querying",
+      ts: Date.now(),
+    };
+    setQueries(prev => [query, ...prev.slice(0, 4)]);
+
+    // Arco de consulta: usuario → nodo (amarillo, dashed)
+    const arcOut = `ga${counter.current++}`;
+    setGeoArcs(prev => [...prev, {
+      id: arcOut, fromCoords: coords, toCoords: nearest.coords,
+      color: "#facc15", duration: latencyMs, returning: false,
+    }]);
+
+    setTimeout(() => {
+      setGeoArcs(prev => prev.filter(a => a.id !== arcOut));
+      setQueries(prev => prev.map(q => q.id === qid ? { ...q, status: "responded" } : q));
+
+      // Arco de respuesta: nodo → usuario (verde, sólido)
+      const arcIn = `ga${counter.current++}`;
+      setGeoArcs(prev => [...prev, {
+        id: arcIn, fromCoords: nearest.coords, toCoords: coords,
+        color: "#4ade80", duration: latencyMs, returning: true,
+      }]);
+
+      setTimeout(() => {
+        setGeoArcs(prev => prev.filter(a => a.id !== arcIn));
+        setTimeout(() => setQueries(prev => prev.filter(q => q.id !== qid)), 2500);
+      }, latencyMs + 600);
+    }, latencyMs + 200);
+  }, [nodeStates]);
+
   // ── Toggle nodo online/offline ─────────────────────────────────────────
   const toggleNode = useCallback((id: string) => {
     setNodeStates(prev => ({ ...prev, [id]: { ...prev[id], online: !prev[id].online } }));
@@ -213,7 +279,16 @@ export default function Dashboard() {
         {/* Mapa + Panel de control */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
           <div className="lg:col-span-3">
-            <WorldMap nodes={NODE_CONFIG} nodeStates={nodeStates} arcs={arcs} />
+            <WorldMap
+              nodes={NODE_CONFIG}
+              nodeStates={nodeStates}
+              arcs={arcs}
+              geoArcs={geoArcs}
+              activeQueries={queries}
+              queryMode={queryMode}
+              onToggleQueryMode={() => setQueryMode(m => !m)}
+              onMapClick={handleMapClick}
+            />
           </div>
           <div className="lg:col-span-2 flex flex-col gap-4">
             <ControlPanel
@@ -221,7 +296,7 @@ export default function Dashboard() {
               onInsert={insertRecord}
               onConflict={simularConflicto}
             />
-            <SyncLog events={events} />
+            <SyncLog events={events} queries={queries} />
           </div>
         </div>
 

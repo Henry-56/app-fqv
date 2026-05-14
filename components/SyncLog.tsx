@@ -1,5 +1,5 @@
 import { Check, X, Loader2, AlertTriangle } from "lucide-react";
-import { NODE_CONFIG, SyncEvent } from "@/lib/types";
+import { NODE_CONFIG, SyncEvent, UserQuery } from "@/lib/types";
 
 const OP_LABEL: Record<string, string> = { insert: "INS", update: "UPD", delete: "DEL", conflict: "CON" };
 const OP_COLOR: Record<string, string> = {
@@ -9,7 +9,7 @@ const OP_COLOR: Record<string, string> = {
   conflict: "text-orange-400 bg-orange-500/10",
 };
 
-export default function SyncLog({ events }: { events: SyncEvent[] }) {
+export default function SyncLog({ events, queries = [] }: { events: SyncEvent[]; queries?: UserQuery[] }) {
   const pending = events.filter(e => e.status === "sync").length;
 
   return (
@@ -23,8 +23,40 @@ export default function SyncLog({ events }: { events: SyncEvent[] }) {
         )}
       </div>
       <div className="overflow-y-auto p-2 space-y-1 max-h-56">
-        {events.length === 0 && (
-          <p className="text-slate-600 text-xs text-center py-6">Inserta un registro para ver eventos</p>
+        {/* Consultas de usuario */}
+        {queries.map(q => {
+          const node = NODE_CONFIG.find(n => n.id === q.targetNode)!;
+          return (
+            <div key={q.id} className={`flex items-center gap-2 text-xs px-2.5 py-1.5 rounded-lg border ${
+              q.status === "querying"
+                ? "bg-yellow-500/5 border-yellow-500/20"
+                : "bg-green-500/5 border-green-500/20"
+            }`}>
+              {q.status === "querying"
+                ? <Loader2 size={10} className="text-yellow-400 animate-spin shrink-0" />
+                : <Check size={10} className="text-green-400 shrink-0" />
+              }
+              <span className="text-[9px] font-bold font-mono px-1 py-0.5 rounded text-yellow-300 bg-yellow-500/10 shrink-0">
+                QRY
+              </span>
+              <span className="flex-1 truncate">
+                <span className="text-yellow-200">👤 Usuario</span>
+                <span className="text-slate-500 mx-1">→</span>
+                <span style={{ color: node.color }}>{node.bandera} {node.nombre}</span>
+                <span className="text-slate-600 mx-1">·</span>
+                <span className="font-mono text-slate-400">{q.distanceKm.toLocaleString()} km</span>
+              </span>
+              <span className={`shrink-0 font-mono text-[10px] font-medium ${
+                q.status === "querying" ? "text-yellow-400" : "text-green-400"
+              }`}>
+                {q.status === "querying" ? "···" : `${q.latencyMs}ms`}
+              </span>
+            </div>
+          );
+        })}
+
+        {events.length === 0 && queries.length === 0 && (
+          <p className="text-slate-600 text-xs text-center py-6">Inserta un registro o simula una consulta</p>
         )}
         {events.map(ev => {
           const fromNode = NODE_CONFIG.find(n => n.id === ev.from)!;

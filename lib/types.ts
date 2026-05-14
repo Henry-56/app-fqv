@@ -29,6 +29,25 @@ export type Arc = {
   duration: number;
 };
 
+export type GeoArc = {
+  id: string;
+  fromCoords: [number, number];
+  toCoords: [number, number];
+  color: string;
+  duration: number;
+  returning: boolean;
+};
+
+export type UserQuery = {
+  id: string;
+  coords: [number, number];
+  targetNode: NodeId;
+  distanceKm: number;
+  latencyMs: number;
+  status: "querying" | "responded";
+  ts: number;
+};
+
 export type NodeState = {
   online: boolean;
   records: DbRecord[];
